@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ThriftLedger" />
+  <meta name="theme-color" content="#0a0a15" />
+  <title>ThriftLedger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body { background: #0a0a15; color: #e8e8ff; font-family: 'DM Sans', 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #0a0a15; }
+    ::-webkit-scrollbar-thumb { background: #2a2a45; border-radius: 3px; }
+    input, select, textarea { color-scheme: dark; font-family: inherit; }
+    select option { background: #13131f; }
+    .trow:hover td { background: #0e0e1c !important; }
+    input[type=number]::-webkit-inner-spin-button { opacity: 0.4; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .fadeIn { animation: fadeIn 0.2s ease; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzyYh4riaVDCb2YKaDNLmgUq-KkFRw_zVbeHyvZKlt5tOPVybPUTEjEuNpeYM0mrWH2/exec";
+const CACHE_KEY  = "thriftledger-cache";
+
+const PLATFORMS      = ["eBay","Poshmark","Mercari","Facebook","Depop","Etsy","Other"];
+const STATUS_OPTIONS = ["Unlisted","Listed","Sold","Returned"];
+const CATEGORIES     = ["3DS","Board Game","Clothes","DS","Gamecube","Games","Japan 360","Kitchen","Mad Catz","Misc","Music","PC","PS3","Playstation","Playstation 2","Playstation 3","Playstation 4","Puzzle","Toys","VHS","Wii","Wii U","Xbox","Xbox 360","Other"];
+const FEES           = { eBay:0.1325, Poshmark:0.20, Mercari:0.10, Facebook:0.05, Depop:0.10, Etsy:0.065, Other:0.10 };
+
+async function apiGet(action) {
+  const res = await fetch(`${SCRIPT_URL}?action=${action}`);
+  return res.json();
+}
+async function apiPost(body) {
+  const res = await fetch(SCRIPT_URL, { method:"POST", body:JSON.stringify(body) });
+  return res.json();
+}
+
+function calcProfit(item) {
+  const sale = parseFloat(item.salePrice)||0;
+  const cost = parseFloat(item.purchasePrice)||0;
+  const ship = parseFloat(item.shippingCost)||0;
+  const ep   = parseFloat(item.ebayPayout)||0;
+  if (ep > 0) return ep - cost;
+  return sale - cost - ship - sale*(FEES[item.platform]||0.1325);
+}
+function calcROI(item) {
+  const cost = parseFloat(item.purchasePrice)||0;
+  if (!cost) return null;
+  return (calcProfit(item)/cost)*100;
+}
+function fmt(val) {
+  const n = parseFloat(val);
+  return (isNaN(n)||val===""||val==null) ? "—" : `$${n.toFixed(2)}`;
+}
+function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+
+const STATUS_COLORS = {
+  Unlisted:{ bg:"#1e1e2e", text:"#7777aa", dot:"#444466" },
+  Listed:  { bg:"#1a2a1a", text:"#66cc66", dot:"#44aa44" },
+  Sold:    { bg:"#0e1e0e", text:"#88ffaa", dot:"#00cc66" },
+  Returned:{ bg:"#2e1a1a", text:"#ff8888", dot:"#cc4444" },
+};
+const iS  = {width:"100%",background:"#0d0d1a",border:"1px solid #2a2a45",borderRadius:6,color:"#e8e8ff",padding:"8px 10px",fontSize:14,boxSizing:"border-box",outline:"none",fontFamily:"inherit"};
+const btnP= {background:"linear-gradient(135deg,#4444cc,#6633cc)",color:"#fff",border:"none",borderRadius:7,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontSize:14,whiteSpace:"nowrap"};
+const btnS= {background:"#1a1a2e",color:"#8888bb",border:"1px solid #2a2a45",borderRadius:7,padding:"10px 16px",fontWeight:600,cursor:"pointer",fontSize:14,whiteSpace:"nowrap"};
+const td  = {padding:"10px 9px",verticalAlign:"middle",color:"#9999bb"};
+
+function Badge({status}) {
+  const c = STATUS_COLORS[status]||STATUS_COLORS.Unlisted;
+  return (
+    <span style={{background:c.bg,color:c.text,border:`1px solid ${c.dot}44`,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700,display:"inline-flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+      <span style={{width:5,height:5,borderRadius:"50%",background:c.dot,flexShrink:0}}/>
+      {status}
+    </span>
+  );
+}
+
+function Toast({message,type}) {
+  const colors={success:"#44cc77",error:"#ff6655",info:"#8877ff",saving:"#ffaa33"};
+  return (
+    <div className="fadeIn" style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#1a1a2e",border:`1px solid ${colors[type]||colors.info}55`,borderRadius:8,padding:"10px 20px",color:colors[type]||colors.info,fontWeight:600,fontSize:13,zIndex:200,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",gap:8,whiteSpace:"nowrap"}}>
+      {type==="saving"&&<span className="spin">⟳</span>}
+      {message}
+    </div>
+  );
+}
+
+function Modal({item,onSave,onClose,onDelete,saving}) {
+  const [form,setForm] = useState({...item});
+  const profit = form.status==="Sold" ? calcProfit(form) : null;
+  const roi    = form.status==="Sold" ? calcROI(form) : null;
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,backdropFilter:"blur(4px)",padding:16}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="fadeIn" style={{background:"#13131f",border:"1px solid #2a2a45",borderRadius:14,width:"min(640px,100%)",maxHeight:"90vh",overflowY:"auto",padding:"24px 20px 20px",boxShadow:"0 24px 80px rgba(0,0,0,0.7)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+          <h2 style={{margin:0,color:"#e8e8ff",fontFamily:"'Playfair Display',serif",fontSize:18}}>{form.name||"New Item"}</h2>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer",padding:"0 4px"}}>✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 16px"}}>
+          {[
+            ["Item Name","name","text","full",null,""],
+            ["Category / System","category","select",null,CATEGORIES,""],
+            ["Source","source","text",null,null,"Where did you buy it?"],
+            ["Purchase Date","purchaseDate","text",null,null,"e.g. 2024-03"],
+            ["Purchase Price ($)","purchasePrice","number",null,null,""],
+            ["Platform","platform","select",null,PLATFORMS,""],
+            ["List Price ($)","listPrice","number",null,null,""],
+            ["Status","status","select",null,STATUS_OPTIONS,""],
+            ["Sale Date","saleDate","text",null,null,"e.g. 2024-08"],
+            ["Sale Price ($)","salePrice","number",null,null,""],
+            ["eBay Payout ($) — Order Earnings","ebayPayout","number",null,null,"From eBay receipt"],
+            ["Shipping Cost ($) — info only","shippingCost","number",null,null,"Not used in profit calc"],
+            ["Notes","notes","textarea","full",null,""],
+          ].map(([label,key,type,span,opts,placeholder])=>(
+            <div key={key} style={{gridColumn:span==="full"?"1 / -1":"auto"}}>
+              <label style={{display:"block",color:"#55558a",fontSize:10,fontWeight:700,letterSpacing:"0.09em",marginBottom:4,textTransform:"uppercase"}}>{label}</label>
+              {type==="select"?(
+                <select value={form[key]||""} onChange={e=>set(key,e.target.value)} style={iS}>
+                  {opts.map(o=><option key={o}>{o}</option>)}
+                </select>
+              ):type==="textarea"?(
+                <textarea value={form[key]||""} onChange={e=>set(key,e.target.value)} rows={2} placeholder={placeholder} style={{...iS,resize:"vertical"}}/>
+              ):(
+                <input type={type} value={form[key]||""} onChange={e=>set(key,e.target.value)} placeholder={placeholder} step={type==="number"?"0.01":undefined} min={type==="number"?"0":undefined} style={iS}/>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {form.status==="Sold"&&(
+          <div style={{display:"flex",gap:10,marginTop:16,padding:"13px 14px",background:"#0d190d",border:"1px solid #1a331a",borderRadius:8}}>
+            {[
+              ["Net Profit",fmt(profit),profit>=0?"#88ffaa":"#ff8888"],
+              ["ROI",roi!=null?`${roi.toFixed(0)}%`:"—",roi>=0?"#88ffaa":"#ff8888"],
+              ["Est. Fees",fmt((parseFloat(form.salePrice)||0)*(FEES[form.platform]||0.1325)),"#aaaacc"],
+            ].map(([l,v,c])=>(
+              <div key={l} style={{flex:1,textAlign:"center"}}>
+                <div style={{color:"#558855",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{l}</div>
+                <div style={{color:c,fontSize:20,fontWeight:800,fontFamily:"'Playfair Display',serif"}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{display:"flex",gap:8,marginTop:18,justifyContent:"space-between"}}>
+          <button onClick={()=>{if(confirm("Delete this item?"))onDelete(form.id);}} style={{...btnS,color:"#cc4444",borderColor:"#2a1010"}}>Delete</button>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={onClose} style={btnS}>Cancel</button>
+            <button onClick={()=>onSave(form)} disabled={saving} style={{...btnP,opacity:saving?0.7:1}}>
+              {saving?<><span className="spin">⟳</span> Saving…</>:"Save"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [items,   setItems]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [toast,   setToast]   = useState(null);
+  const [modal,   setModal]   = useState(null);
+  const [filter,  setFilter]  = useState("All");
+  const [search,  setSearch]  = useState("");
+  const [sortBy,  setSortBy]  = useState("name");
+  const [sortDir, setSortDir] = useState("asc");
+  const [tab,     setTab]     = useState("inventory");
+  const toastTimer = useRef(null);
+
+  function showToast(message,type="info",duration=2500) {
+    setToast({message,type});
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(()=>setToast(null),duration);
+  }
+
+  useEffect(()=>{
+    (async()=>{
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) setItems(JSON.parse(cached));
+      } catch {}
+      setSyncing(true);
+      try {
+        const data = await apiGet("getAll");
+        if (data.items) {
+          setItems(data.items);
+          localStorage.setItem(CACHE_KEY,JSON.stringify(data.items));
+        }
+      } catch {
+        showToast("Couldn't reach Google Sheets — showing cached data","error",4000);
+      } finally {
+        setSyncing(false);
+        setLoading(false);
+      }
+    })();
+  },[]);
+
+  const saveItem = useCallback(async(item)=>{
+    setSaving(true);
+    showToast("Saving…","saving",30000);
+    setItems(prev=>{
+      const next = prev.find(i=>i.id===item.id) ? prev.map(i=>i.id===item.id?item:i) : [...prev,item];
+      localStorage.setItem(CACHE_KEY,JSON.stringify(next));
+      return next;
+    });
+    setModal(null);
+    try {
+      await apiPost({action:"save",item});
+      showToast("Saved ✓","success");
+    } catch {
+      showToast("Saved locally — sync failed, will retry on reload","error",4000);
+    } finally {
+      setSaving(false);
+    }
+  },[]);
+
+  const deleteItem = useCallback(async(id)=>{
+    setModal(null);
+    showToast("Deleting…","saving",30000);
+    setItems(prev=>{
+      const next = prev.filter(i=>i.id!==id);
+      localStorage.setItem(CACHE_KEY,JSON.stringify(next));
+      return next;
+    });
+    try {
+      await apiPost({action:"delete",id});
+      showToast("Deleted ✓","success");
+    } catch {
+      showToast("Deleted locally — sync failed","error",3000);
+    }
+  },[]);
+
+  const pushToSheets = useCallback(async()=>{
+    if (!confirm('Push all ' + realItems.length + ' local items to Google Sheets? This will overwrite anything currently in the sheet.')) return;
+    setPushing(true);
+    showToast('Pushing to Google Sheets…','saving',60000);
+    try {
+      const data = await apiPost({action:'import', items:realItems});
+      showToast('Done! ' + data.count + ' items synced to Google Sheets ✓','success',4000);
+    } catch {
+      showToast('Push failed — check your connection','error',4000);
+    } finally {
+      setPushing(false);
+    }
+  },[realItems]);
+
+  const emptyItem = ()=>({
+    id:uid(),name:"",category:"Misc",source:"",purchaseDate:"",
+    purchasePrice:"",platform:"eBay",listingDate:"",listPrice:"",
+    status:"Unlisted",saleDate:"",salePrice:"",shippingCost:"",ebayPayout:"",notes:"",
+  });
+
+  const realItems = items.filter(i=>i.name);
+  const filtered  = realItems
+    .filter(i=>filter==="All"||i.status===filter)
+    .filter(i=>!search||i.name.toLowerCase().includes(search.toLowerCase())||(i.category||"").toLowerCase().includes(search.toLowerCase())||(i.source||"").toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b)=>{
+      let av=sortBy==="profit"?calcProfit(a):(a[sortBy]??"");
+      let bv=sortBy==="profit"?calcProfit(b):(b[sortBy]??"");
+      if(typeof av==="string") av=av.toLowerCase();
+      if(typeof bv==="string") bv=bv.toLowerCase();
+      return sortDir==="asc"?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);
+    });
+
+  const toggleSort = col=>{ if(sortBy===col) setSortDir(d=>d==="asc"?"desc":"asc"); else{setSortBy(col);setSortDir("asc");} };
+  const Arr = ({col})=><>{sortBy===col?(sortDir==="asc"?" ↑":" ↓"):""}</>;
+
+  const sold    = realItems.filter(i=>i.status==="Sold");
+  const listed  = realItems.filter(i=>i.status==="Listed");
+  const unlist  = realItems.filter(i=>i.status==="Unlisted");
+  const totalRevenue      = sold.reduce((s,i)=>s+(parseFloat(i.salePrice)||0),0);
+  const totalProfit       = sold.reduce((s,i)=>s+calcProfit(i),0);
+  const costOfGoodsSold   = sold.reduce((s,i)=>s+(parseFloat(i.purchasePrice)||0),0);
+  const tiedUpInInventory = [...listed,...unlist].reduce((s,i)=>s+(parseFloat(i.purchasePrice)||0),0);
+  const avgROI = sold.length ? sold.reduce((s,i)=>s+(calcROI(i)||0),0)/sold.length : 0;
+
+  const catStats={};
+  sold.forEach(i=>{
+    const c=i.category||"Other";
+    if(!catStats[c]) catStats[c]={count:0,profit:0,revenue:0};
+    catStats[c].count++; catStats[c].profit+=calcProfit(i); catStats[c].revenue+=parseFloat(i.salePrice)||0;
+  });
+  const topCats   = Object.entries(catStats).sort((a,b)=>b[1].profit-a[1].profit);
+  const maxProfit = topCats.length ? topCats[0][1].profit : 1;
+
+  if (loading&&items.length===0) return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:16}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:800}}><span style={{color:"#8877ff"}}>Thrift</span>Ledger</div>
+      <div style={{color:"#444466",fontSize:14,display:"flex",alignItems:"center",gap:8}}><span className="spin" style={{fontSize:18}}>⟳</span> Loading from Google Sheets…</div>
+    </div>
+  );
+
+  return (
+    <div style={{minHeight:"100vh",background:"#0a0a15",color:"#e8e8ff",fontFamily:"'DM Sans','Segoe UI',sans-serif",paddingBottom:60}}>
+
+      {/* Header */}
+      <div style={{background:"linear-gradient(180deg,#0f0f22,#0a0a15)",borderBottom:"1px solid #1a1a30",padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,position:"sticky",top:0,zIndex:50,backdropFilter:"blur(8px)"}}>
+        <div>
+          <h1 style={{margin:0,fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800}}>
+            <span style={{color:"#8877ff"}}>Thrift</span>Ledger
+          </h1>
+          <div style={{color:"#333366",fontSize:11,marginTop:1,display:"flex",alignItems:"center",gap:6}}>
+            {syncing
+              ? <><span className="spin">⟳</span> Syncing with Google Sheets…</>
+              : <><span style={{color:"#44cc77"}}>●</span> {realItems.length} items · synced</>
+            }
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={pushToSheets} disabled={pushing||syncing} style={{...btnS,fontSize:13,padding:'9px 14px',opacity:(pushing||syncing)?0.6:1}} title='Push all local data to Google Sheets'>
+            {pushing?<><span className='spin'>⟳</span> Pushing…</>:'⬆ Push to Sheets'}
+          </button>
+          <button onClick={()=>setModal({item:emptyItem()})} style={btnP}>+ Add Item</button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,padding:"14px 14px 0"}}>
+        {[
+          ["Net Profit",          fmt(totalProfit),        totalProfit>=0?"#44cc77":"#ff6655"],
+          ["Revenue",             fmt(totalRevenue),        "#44aaff"],
+          ["Tied Up in Inventory",fmt(tiedUpInInventory),   "#ffaa33"],
+          ["Cost of Goods Sold",  fmt(costOfGoodsSold),     "#8877ff"],
+          ["Items Sold",          sold.length,              "#ffcc44"],
+          ["Active Listings",     listed.length,            "#88aaff"],
+          ["Avg ROI",             `${avgROI.toFixed(0)}%`,  "#ff88cc"],
+          ["Total Items",         realItems.length,         "#666688"],
+        ].map(([label,val,color])=>(
+          <div key={label} style={{background:"#0e0e1c",border:"1px solid #1a1a30",borderRadius:10,padding:"11px 13px"}}>
+            <div style={{color:"#33335a",fontSize:10,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:4}}>{label}</div>
+            <div style={{color,fontSize:18,fontWeight:800,fontFamily:"'Playfair Display',serif"}}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:4,padding:"12px 14px 0"}}>
+        {[["inventory","📦 Inventory"],["stats","📊 Stats"]].map(([t,l])=>(
+          <button key={t} onClick={()=>setTab(t)} style={{...btnS,padding:"7px 16px",fontSize:12,background:tab===t?"#1e1e38":"#0e0e1c",color:tab===t?"#ccccff":"#44447a",borderColor:tab===t?"#44447a":"#1a1a30"}}>{l}</button>
+        ))}
+      </div>
+
+      {tab==="stats"?(
+        <div style={{padding:"16px 14px"}}>
+          <h3 style={{fontFamily:"'Playfair Display',serif",color:"#bbbbee",marginBottom:12,fontSize:16}}>Profit by Category</h3>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>
+            {topCats.map(([cat,s])=>(
+              <div key={cat} style={{background:"#0e0e1c",border:"1px solid #1a1a30",borderRadius:10,padding:"12px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                  <span style={{color:"#ccccee",fontWeight:600,fontSize:13}}>{cat}</span>
+                  <span style={{color:s.profit>=0?"#88ffaa":"#ff8888",fontWeight:700,fontSize:13}}>{fmt(s.profit)}</span>
+                </div>
+                <div style={{background:"#181828",borderRadius:4,height:5,overflow:"hidden"}}>
+                  <div style={{width:`${Math.max(2,(s.profit/maxProfit)*100)}%`,height:"100%",background:"linear-gradient(90deg,#5533cc,#44cc88)",borderRadius:4}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",marginTop:5}}>
+                  <span style={{color:"#33335a",fontSize:10}}>{s.count} sold</span>
+                  <span style={{color:"#33335a",fontSize:10}}>Rev {fmt(s.revenue)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <h3 style={{fontFamily:"'Playfair Display',serif",color:"#bbbbee",marginTop:22,marginBottom:12,fontSize:16}}>Top 10 Most Profitable</h3>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{borderBottom:"1px solid #1a1a30"}}>
+                  {["Item","Category","Cost","Sale Price","Profit","ROI"].map(h=>(
+                    <th key={h} style={{textAlign:"left",padding:"7px 9px",color:"#33335a",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...sold].sort((a,b)=>calcProfit(b)-calcProfit(a)).slice(0,10).map(item=>{
+                  const p=calcProfit(item); const r=calcROI(item);
+                  return (
+                    <tr key={item.id} className="trow" style={{borderBottom:"1px solid #12121e"}}>
+                      <td style={td}><strong style={{color:"#ddddf5"}}>{item.name}</strong></td>
+                      <td style={{...td,fontSize:11,color:"#55558a"}}>{item.category}</td>
+                      <td style={td}>{fmt(item.purchasePrice)}</td>
+                      <td style={td}>{fmt(item.salePrice)}</td>
+                      <td style={td}><span style={{color:"#88ffaa",fontWeight:700}}>{fmt(p)}</span></td>
+                      <td style={td}><span style={{color:"#88ffaa",fontWeight:700}}>{r!=null?`${r.toFixed(0)}%`:"—"}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ):(
+        <>
+          <div style={{display:"flex",gap:6,padding:"12px 14px 0",flexWrap:"wrap",alignItems:"center"}}>
+            <input placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)} style={{...iS,width:170,flex:"none"}}/>
+            {["All",...STATUS_OPTIONS].map(s=>(
+              <button key={s} onClick={()=>setFilter(s)} style={{...btnS,padding:"6px 10px",fontSize:11,background:filter===s?"#1e1e38":"#0e0e1c",color:filter===s?"#ccccff":"#44447a",borderColor:filter===s?"#44447a":"#1a1a30"}}>
+                {s} ({s==="All"?realItems.length:realItems.filter(i=>i.status===s).length})
+              </button>
+            ))}
+          </div>
+          <div style={{margin:"10px 14px 0",overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{borderBottom:"1px solid #1a1a30"}}>
+                  {[["Item","name"],["Cat","category"],["Cost","purchasePrice"],["Status","status"],["Sale $","salePrice"],["Profit","profit"],["ROI",null],["",""]].map(([l,col])=>(
+                    <th key={l} onClick={()=>col&&toggleSort(col)} style={{textAlign:"left",padding:"7px 8px",color:"#33335a",fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",cursor:col?"pointer":"default",whiteSpace:"nowrap",userSelect:"none"}}>
+                      {l}{col&&<Arr col={col}/>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length===0?(
+                  <tr><td colSpan={8} style={{textAlign:"center",padding:36,color:"#22223a"}}>No items match.</td></tr>
+                ):filtered.map(item=>{
+                  const profit=item.status==="Sold"?calcProfit(item):null;
+                  const roi=item.status==="Sold"?calcROI(item):null;
+                  return (
+                    <tr key={item.id} className="trow" style={{borderBottom:"1px solid #11111e",cursor:"pointer"}} onClick={()=>setModal({item})}>
+                      <td style={td}>
+                        <strong style={{color:"#ddddf5"}}>{item.name}</strong>
+                        {item.notes&&<div style={{color:"#2a2a4a",fontSize:10,marginTop:1}}>{item.notes.slice(0,30)}{item.notes.length>30?"…":""}</div>}
+                      </td>
+                      <td style={{...td,color:"#55558a",fontSize:11}}>{item.category}</td>
+                      <td style={td}>{fmt(item.purchasePrice)}</td>
+                      <td style={td}><Badge status={item.status}/></td>
+                      <td style={td}>{item.salePrice?fmt(item.salePrice):<span style={{color:"#1e1e33"}}>—</span>}</td>
+                      <td style={td}>{profit!=null?<span style={{color:profit>=0?"#44cc77":"#ff6655",fontWeight:700}}>{fmt(profit)}</span>:<span style={{color:"#1e1e33"}}>—</span>}</td>
+                      <td style={td}>{roi!=null?<span style={{color:roi>=0?"#44cc77":"#ff6655",fontWeight:700}}>{roi.toFixed(0)}%</span>:<span style={{color:"#1e1e33"}}>—</span>}</td>
+                      <td style={{...td,color:"#33337a",fontSize:11}}>Edit →</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {modal&&<Modal item={modal.item} onSave={saveItem} onClose={()=>setModal(null)} onDelete={deleteItem} saving={saving}/>}
+      {toast&&<Toast message={toast.message} type={toast.type}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
