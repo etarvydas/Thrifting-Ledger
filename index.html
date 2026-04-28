@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="ThriftLedger"/>
+  <meta name="theme-color" content="#0a0a15"/>
+  <title>ThriftLedger</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{height:100%;background:#0a0a15;color:#e8e8ff;font-family:'DM Sans','Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
+    ::-webkit-scrollbar{width:4px;height:4px;}
+    ::-webkit-scrollbar-thumb{background:#2a2a45;border-radius:3px;}
+    input,select,textarea{color-scheme:dark;font-family:inherit;background:#0d0d1a;border:1px solid #2a2a45;border-radius:6px;color:#e8e8ff;padding:9px 11px;font-size:15px;width:100%;outline:none;box-sizing:border-box;}
+    input[type=number]::-webkit-inner-spin-button{opacity:.4;}
+    select option{background:#13131f;}
+    button{cursor:pointer;font-family:inherit;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .spin{animation:spin .8s linear infinite;display:inline-block;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+    .fadeUp{animation:fadeUp .18s ease;}
+
+    /* Layout */
+    #app{display:flex;flex-direction:column;min-height:100vh;}
+    #header{background:linear-gradient(180deg,#0f0f22,#0a0a15);border-bottom:1px solid #1a1a30;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:50;}
+    #header h1{font-family:'Playfair Display',serif;font-size:22px;font-weight:800;margin:0;}
+    #header h1 span{color:#8877ff;}
+    #sync-status{color:#33335a;font-size:11px;margin-top:2px;display:flex;align-items:center;gap:5px;}
+    #header-btns{display:flex;gap:8px;flex-shrink:0;}
+
+    /* Stat cards */
+    #stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:14px 14px 0;}
+    .stat-card{background:#0e0e1c;border:1px solid #1a1a30;border-radius:10px;padding:11px 13px;}
+    .stat-label{color:#33335a;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px;}
+    .stat-val{font-family:'Playfair Display',serif;font-size:18px;font-weight:800;}
+
+    /* Tabs */
+    #tabs{display:flex;gap:4px;padding:12px 14px 0;}
+    .tab-btn{background:#0e0e1c;color:#44447a;border:1px solid #1a1a30;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;}
+    .tab-btn.active{background:#1e1e38;color:#ccccff;border-color:#44447a;}
+
+    /* Filter bar */
+    #filter-bar{display:flex;gap:6px;padding:12px 14px 0;flex-wrap:wrap;align-items:center;}
+    #search-input{width:160px;flex:none;font-size:14px;}
+    .filter-btn{background:#0e0e1c;color:#44447a;border:1px solid #1a1a30;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:600;}
+    .filter-btn.active{background:#1e1e38;color:#ccccff;border-color:#44447a;}
+
+    /* Table */
+    #table-wrap{margin:10px 14px 0;overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th{text-align:left;padding:7px 8px;color:#33335a;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid #1a1a30;white-space:nowrap;user-select:none;}
+    th.sortable{cursor:pointer;}
+    td{padding:9px 8px;vertical-align:middle;color:#9999bb;border-bottom:1px solid #11111e;}
+    tr.item-row{cursor:pointer;}
+    tr.item-row:hover td{background:#0e0e1c;}
+    .item-name{color:#ddddf5;font-weight:600;}
+    .item-note{color:#2a2a4a;font-size:10px;margin-top:1px;}
+    .item-cat{color:#55558a;font-size:11px;}
+    .profit-pos{color:#44cc77;font-weight:700;}
+    .profit-neg{color:#ff6655;font-weight:700;}
+    .dash{color:#1e1e33;}
+
+    /* Badge */
+    .badge{display:inline-flex;align-items:center;gap:5px;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;white-space:nowrap;}
+    .badge-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+
+    /* Stats tab */
+    #stats-tab{padding:16px 14px;}
+    .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:22px;}
+    .cat-card{background:#0e0e1c;border:1px solid #1a1a30;border-radius:10px;padding:12px 14px;}
+    .cat-bar-bg{background:#181828;border-radius:4px;height:5px;overflow:hidden;margin:7px 0 5px;}
+    .cat-bar{height:100%;background:linear-gradient(90deg,#5533cc,#44cc88);border-radius:4px;}
+    .cat-meta{display:flex;justify-content:space-between;font-size:10px;color:#33335a;}
+    .section-title{font-family:'Playfair Display',serif;color:#bbbbee;font-size:16px;margin-bottom:12px;}
+
+    /* Modal */
+    #modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:100;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);}
+    #modal-overlay.open{display:flex;}
+    #modal-box{background:#13131f;border:1px solid #2a2a45;border-radius:14px;width:min(620px,100%);max-height:90vh;overflow-y:auto;padding:22px 18px 18px;box-shadow:0 24px 80px rgba(0,0,0,.7);}
+    #modal-box.fadeUp{animation:fadeUp .18s ease;}
+    #modal-title{font-family:'Playfair Display',serif;font-size:18px;color:#e8e8ff;margin-bottom:18px;}
+    .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;}
+    .field-full{grid-column:1/-1;}
+    .field-label{display:block;color:#55558a;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;margin-bottom:4px;}
+    .profit-preview{display:flex;gap:10px;margin-top:14px;padding:13px 14px;background:#0d190d;border:1px solid #1a331a;border-radius:8px;}
+    .pp-item{flex:1;text-align:center;}
+    .pp-label{color:#558855;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px;}
+    .pp-val{font-family:'Playfair Display',serif;font-size:20px;font-weight:800;}
+    .modal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px;gap:8px;}
+    .modal-footer-right{display:flex;gap:8px;}
+
+    /* Buttons */
+    .btn-primary{background:linear-gradient(135deg,#4444cc,#6633cc);color:#fff;border:none;border-radius:7px;padding:10px 20px;font-weight:700;font-size:14px;white-space:nowrap;}
+    .btn-secondary{background:#1a1a2e;color:#8888bb;border:1px solid #2a2a45;border-radius:7px;padding:10px 16px;font-weight:600;font-size:14px;white-space:nowrap;}
+    .btn-danger{background:#1a1a2e;color:#cc4444;border:1px solid #2a1010;border-radius:7px;padding:10px 16px;font-weight:600;font-size:14px;}
+    .btn-sm{padding:7px 14px;font-size:12px;}
+
+    /* Toast */
+    #toast{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;border-radius:8px;padding:10px 20px;font-weight:600;font-size:13px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.5);white-space:nowrap;align-items:center;gap:8px;}
+    #toast.show{display:flex;}
+
+    /* Loading */
+    #loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;}
+    #loading h1{font-family:'Playfair Display',serif;font-size:28px;font-weight:800;}
+    #loading p{color:#444466;font-size:14px;display:flex;align-items:center;gap:8px;}
+  </style>
+</head>
+<body>
+<div id="loading">
+  <h1><span style="color:#8877ff">Thrift</span>Ledger</h1>
+  <p><span class="spin" style="font-size:18px">⟳</span> Loading from Google Sheets…</p>
+</div>
+<div id="app" style="display:none">
+  <div id="header">
+    <div>
+      <h1><span>Thrift</span>Ledger</h1>
+      <div id="sync-status"><span id="sync-dot" style="color:#44cc77">●</span> <span id="sync-text">synced</span></div>
+    </div>
+    <div id="header-btns">
+      <button class="btn-secondary btn-sm" id="push-btn" onclick="pushToSheets()">⬆ Push to Sheets</button>
+      <button class="btn-primary btn-sm" onclick="openModal(null)">+ Add Item</button>
+    </div>
+  </div>
+  <div id="stats"></div>
+  <div id="tabs">
+    <button class="tab-btn active" id="tab-inventory" onclick="switchTab('inventory')">📦 Inventory</button>
+    <button class="tab-btn" id="tab-stats" onclick="switchTab('stats')">📊 Stats</button>
+  </div>
+  <div id="inventory-tab">
+    <div id="filter-bar">
+      <input id="search-input" type="search" placeholder="Search…" oninput="renderTable()"/>
+      <div id="filter-btns"></div>
+    </div>
+    <div id="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="sortable" onclick="sortBy('name')">Item <span id="sort-name"></span></th>
+            <th class="sortable" onclick="sortBy('category')">Cat <span id="sort-category"></span></th>
+            <th class="sortable" onclick="sortBy('purchasePrice')">Cost <span id="sort-purchasePrice"></span></th>
+            <th>Status</th>
+            <th class="sortable" onclick="sortBy('salePrice')">Sale $ <span id="sort-salePrice"></span></th>
+            <th class="sortable" onclick="sortBy('profit')">Profit <span id="sort-profit"></span></th>
+            <th>ROI</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="stats-tab" style="display:none"></div>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay" onclick="closeModalIfOverlay(event)">
+  <div id="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div id="modal-title">Item</div>
+      <button onclick="closeModal()" style="background:none;border:none;color:#555;font-size:22px;cursor:pointer;padding:0 4px;">✕</button>
+    </div>
+    <div class="field-grid" id="modal-fields"></div>
+    <div id="profit-preview" class="profit-preview" style="display:none">
+      <div class="pp-item"><div class="pp-label">Net Profit</div><div class="pp-val" id="pp-profit">—</div></div>
+      <div class="pp-item"><div class="pp-label">ROI</div><div class="pp-val" id="pp-roi">—</div></div>
+      <div class="pp-item"><div class="pp-label">Est. Fees</div><div class="pp-val" id="pp-fees" style="color:#aaaacc">—</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-danger" id="delete-btn" onclick="deleteCurrentItem()">Delete</button>
+      <div class="modal-footer-right">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" id="save-btn" onclick="saveCurrentItem()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><span id="toast-icon"></span><span id="toast-msg"></span></div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzyYh4riaVDCb2YKaDNLmgUq-KkFRw_zVbeHyvZKlt5tOPVybPUTEjEuNpeYM0mrWH2/exec";
+const CACHE_KEY  = "thriftledger-cache";
+const PLATFORMS  = ["eBay","Poshmark","Mercari","Facebook","Depop","Etsy","Other"];
+const STATUSES   = ["Unlisted","Listed","Sold","Returned"];
+const CATEGORIES = ["3DS","Board Game","Clothes","DS","Gamecube","Games","Japan 360","Kitchen","Mad Catz","Misc","Music","PC","PS3","Playstation","Playstation 2","Playstation 3","Playstation 4","Puzzle","Toys","VHS","Wii","Wii U","Xbox","Xbox 360","Other"];
+const FEES       = {eBay:.1325,Poshmark:.20,Mercari:.10,Facebook:.05,Depop:.10,Etsy:.065,Other:.10};
+const STATUS_STYLE = {
+  Unlisted:{bg:"#1e1e2e",text:"#7777aa",dot:"#444466"},
+  Listed:  {bg:"#1a2a1a",text:"#66cc66",dot:"#44aa44"},
+  Sold:    {bg:"#0e1e0e",text:"#88ffaa",dot:"#00cc66"},
+  Returned:{bg:"#2e1a1a",text:"#ff8888",dot:"#cc4444"},
+};
+
+let items = [];
+let currentSort = {col:"name", dir:"asc"};
+let currentFilter = "All";
+let currentItem = null;
+let toastTimer = null;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2); }
+
+function calcProfit(item){
+  const sale=parseFloat(item.salePrice)||0, cost=parseFloat(item.purchasePrice)||0;
+  const ship=parseFloat(item.shippingCost)||0, ep=parseFloat(item.ebayPayout)||0;
+  if(ep>0) return ep-cost;
+  return sale-cost-ship-sale*(FEES[item.platform]||.1325);
+}
+function calcROI(item){
+  const cost=parseFloat(item.purchasePrice)||0;
+  if(!cost) return null;
+  return (calcProfit(item)/cost)*100;
+}
+function fmt(val){
+  const n=parseFloat(val);
+  return (isNaN(n)||val===""||val==null)?"—":"$"+n.toFixed(2);
+}
+function profitClass(v){ return v>=0?"profit-pos":"profit-neg"; }
+
+function badge(status){
+  const s=STATUS_STYLE[status]||STATUS_STYLE.Unlisted;
+  return `<span class="badge" style="background:${s.bg};color:${s.text};border:1px solid ${s.dot}44"><span class="badge-dot" style="background:${s.dot}"></span>${status}</span>`;
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function apiGet(action){
+  const r=await fetch(`${SCRIPT_URL}?action=${action}`);
+  return r.json();
+}
+async function apiPost(body){
+  const r=await fetch(SCRIPT_URL,{method:"POST",body:JSON.stringify(body)});
+  return r.json();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg,type,duration=2800){
+  const colors={success:"#44cc77",error:"#ff6655",info:"#8877ff",saving:"#ffaa33"};
+  const t=document.getElementById("toast");
+  document.getElementById("toast-msg").textContent=msg;
+  document.getElementById("toast-icon").innerHTML=type==="saving"?'<span class="spin">⟳</span>':"";
+  t.style.color=colors[type]||colors.info;
+  t.style.borderColor=(colors[type]||colors.info)+"44";
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  if(type!=="saving") toastTimer=setTimeout(()=>t.classList.remove("show"),duration);
+}
+function hideToast(){ document.getElementById("toast").classList.remove("show"); }
+
+// ── Sync status ───────────────────────────────────────────────────────────────
+function setSyncing(on){
+  document.getElementById("sync-dot").style.color=on?"#ffaa33":"#44cc77";
+  document.getElementById("sync-text").textContent=on?"Syncing with Google Sheets…":"synced · "+realItems().length+" items";
+}
+
+// ── Data ──────────────────────────────────────────────────────────────────────
+function realItems(){ return items.filter(i=>i.name); }
+
+function saveCache(){ try{localStorage.setItem(CACHE_KEY,JSON.stringify(items));}catch{} }
+
+async function loadData(){
+  // Load cache first for instant display
+  try{
+    const c=localStorage.getItem(CACHE_KEY);
+    if(c){ items=JSON.parse(c); showApp(); render(); }
+  }catch{}
+
+  setSyncing(true);
+  try{
+    const data=await apiGet("getAll");
+    if(data.items!==undefined){
+      items=data.items;
+      saveCache();
+      showApp();
+      render();
+      setSyncing(false);
+    }
+  }catch(e){
+    setSyncing(false);
+    if(items.length>0) showToast("Using cached data — couldn't reach Sheets","error",4000);
+    else showToast("Could not load data","error",4000);
+  }
+}
+
+function showApp(){
+  document.getElementById("loading").style.display="none";
+  document.getElementById("app").style.display="flex";
+  document.getElementById("app").style.flexDirection="column";
+}
+
+// ── Push all to Sheets ────────────────────────────────────────────────────────
+async function pushToSheets(){
+  const ri=realItems();
+  if(!confirm("Push all "+ri.length+" items to Google Sheets? This overwrites the sheet.")) return;
+  document.getElementById("push-btn").disabled=true;
+  showToast("Pushing "+ri.length+" items to Sheets…","saving",60000);
+  try{
+    const res=await apiPost({action:"import",items:ri});
+    hideToast();
+    showToast("Done! "+res.count+" items synced ✓","success",4000);
+  }catch{
+    showToast("Push failed — check connection","error",4000);
+  }finally{
+    document.getElementById("push-btn").disabled=false;
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(){
+  renderStats();
+  renderFilterBtns();
+  renderTable();
+  renderStatsTab();
+}
+
+function renderStats(){
+  const ri=realItems();
+  const sold=ri.filter(i=>i.status==="Sold");
+  const listed=ri.filter(i=>i.status==="Listed");
+  const unlist=ri.filter(i=>i.status==="Unlisted");
+  const revenue=sold.reduce((s,i)=>s+(parseFloat(i.salePrice)||0),0);
+  const profit=sold.reduce((s,i)=>s+calcProfit(i),0);
+  const cogs=sold.reduce((s,i)=>s+(parseFloat(i.purchasePrice)||0),0);
+  const tied=[...listed,...unlist].reduce((s,i)=>s+(parseFloat(i.purchasePrice)||0),0);
+  const avgRoi=sold.length?sold.reduce((s,i)=>s+(calcROI(i)||0),0)/sold.length:0;
+
+  const cards=[
+    ["Net Profit",fmt(profit),profit>=0?"#44cc77":"#ff6655"],
+    ["Revenue",fmt(revenue),"#44aaff"],
+    ["Tied Up in Inventory",fmt(tied),"#ffaa33"],
+    ["Cost of Goods Sold",fmt(cogs),"#8877ff"],
+    ["Items Sold",sold.length,"#ffcc44"],
+    ["Active Listings",listed.length,"#88aaff"],
+    ["Avg ROI",avgRoi.toFixed(0)+"%","#ff88cc"],
+    ["Total Items",ri.length,"#666688"],
+  ];
+  document.getElementById("stats").innerHTML=cards.map(([l,v,c])=>
+    `<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-val" style="color:${c}">${v}</div></div>`
+  ).join("");
+}
+
+function renderFilterBtns(){
+  const ri=realItems();
+  const all=["All",...STATUSES];
+  document.getElementById("filter-btns").innerHTML=all.map(s=>{
+    const count=s==="All"?ri.length:ri.filter(i=>i.status===s).length;
+    return `<button class="filter-btn${currentFilter===s?" active":""}" onclick="setFilter('${s}')">${s} (${count})</button>`;
+  }).join("");
+}
+
+function sortBy(col){
+  if(currentSort.col===col) currentSort.dir=currentSort.dir==="asc"?"desc":"asc";
+  else{currentSort.col=col;currentSort.dir="asc";}
+  renderTable();
+}
+
+function setFilter(f){ currentFilter=f; renderFilterBtns(); renderTable(); }
+
+function renderTable(){
+  const search=document.getElementById("search-input").value.toLowerCase();
+  let ri=realItems()
+    .filter(i=>currentFilter==="All"||i.status===currentFilter)
+    .filter(i=>!search||i.name.toLowerCase().includes(search)||(i.category||"").toLowerCase().includes(search)||(i.source||"").toLowerCase().includes(search));
+
+  // Sort
+  ri.sort((a,b)=>{
+    let av=currentSort.col==="profit"?calcProfit(a):(a[currentSort.col]??"");
+    let bv=currentSort.col==="profit"?calcProfit(b):(b[currentSort.col]??"");
+    if(typeof av==="string") av=av.toLowerCase();
+    if(typeof bv==="string") bv=bv.toLowerCase();
+    return currentSort.dir==="asc"?(av<bv?-1:av>bv?1:0):(av>bv?-1:av<bv?1:0);
+  });
+
+  // Sort arrows
+  ["name","category","purchasePrice","salePrice","profit"].forEach(c=>{
+    const el=document.getElementById("sort-"+c);
+    if(el) el.textContent=currentSort.col===c?(currentSort.dir==="asc"?"↑":"↓"):"";
+  });
+
+  const tbody=document.getElementById("table-body");
+  if(ri.length===0){
+    tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;padding:36px;color:#22223a">No items match.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML=ri.map(item=>{
+    const profit=item.status==="Sold"?calcProfit(item):null;
+    const roi=item.status==="Sold"?calcROI(item):null;
+    return `<tr class="item-row" onclick="openModal('${item.id}')">
+      <td><div class="item-name">${esc(item.name)}</div>${item.notes?`<div class="item-note">${esc(item.notes.slice(0,30))}${item.notes.length>30?"…":""}</div>`:""}</td>
+      <td class="item-cat">${esc(item.category||"")}</td>
+      <td>${fmt(item.purchasePrice)}</td>
+      <td>${badge(item.status)}</td>
+      <td>${item.salePrice?fmt(item.salePrice):`<span class="dash">—</span>`}</td>
+      <td>${profit!=null?`<span class="${profitClass(profit)}">${fmt(profit)}</span>`:`<span class="dash">—</span>`}</td>
+      <td>${roi!=null?`<span class="${profitClass(roi)}">${roi.toFixed(0)}%</span>`:`<span class="dash">—</span>`}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderStatsTab(){
+  const ri=realItems();
+  const sold=ri.filter(i=>i.status==="Sold");
+  const catStats={};
+  sold.forEach(i=>{
+    const c=i.category||"Other";
+    if(!catStats[c]) catStats[c]={count:0,profit:0,revenue:0};
+    catStats[c].count++; catStats[c].profit+=calcProfit(i); catStats[c].revenue+=parseFloat(i.salePrice)||0;
+  });
+  const topCats=Object.entries(catStats).sort((a,b)=>b[1].profit-a[1].profit);
+  const maxP=topCats.length?topCats[0][1].profit:1;
+
+  const top10=[...sold].sort((a,b)=>calcProfit(b)-calcProfit(a)).slice(0,10);
+
+  document.getElementById("stats-tab").innerHTML=`
+    <h3 class="section-title">Profit by Category</h3>
+    <div class="cat-grid">${topCats.map(([cat,s])=>`
+      <div class="cat-card">
+        <div style="display:flex;justify-content:space-between">
+          <span style="color:#ccccee;font-weight:600;font-size:13px">${esc(cat)}</span>
+          <span style="color:${s.profit>=0?"#88ffaa":"#ff8888"};font-weight:700;font-size:13px">${fmt(s.profit)}</span>
+        </div>
+        <div class="cat-bar-bg"><div class="cat-bar" style="width:${Math.max(2,(s.profit/maxP)*100)}%"></div></div>
+        <div class="cat-meta"><span>${s.count} sold</span><span>Rev ${fmt(s.revenue)}</span></div>
+      </div>`).join("")}
+    </div>
+    <h3 class="section-title">Top 10 Most Profitable</h3>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>Item</th><th>Category</th><th>Cost</th><th>Sale</th><th>Profit</th><th>ROI</th>
+        </tr></thead>
+        <tbody>${top10.map(item=>{
+          const p=calcProfit(item),r=calcROI(item);
+          return `<tr>
+            <td><span style="color:#ddddf5;font-weight:600">${esc(item.name)}</span></td>
+            <td class="item-cat">${esc(item.category||"")}</td>
+            <td>${fmt(item.purchasePrice)}</td>
+            <td>${fmt(item.salePrice)}</td>
+            <td><span class="${profitClass(p)}">${fmt(p)}</span></td>
+            <td><span class="${profitClass(r||0)}">${r!=null?r.toFixed(0)+"%":"—"}</span></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>
+    </div>`;
+}
+
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(tab){
+  document.getElementById("inventory-tab").style.display=tab==="inventory"?"block":"none";
+  document.getElementById("stats-tab").style.display=tab==="stats"?"block":"none";
+  document.getElementById("tab-inventory").className="tab-btn"+(tab==="inventory"?" active":"");
+  document.getElementById("tab-stats").className="tab-btn"+(tab==="stats"?" active":"");
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+const FIELDS=[
+  {key:"name",      label:"Item Name",                        type:"text",   span:true,  ph:""},
+  {key:"category",  label:"Category / System",                type:"select", opts:CATEGORIES},
+  {key:"source",    label:"Source",                           type:"text",   ph:"Where did you buy it?"},
+  {key:"purchaseDate",label:"Purchase Date",                  type:"text",   ph:"e.g. 2024-03"},
+  {key:"purchasePrice",label:"Purchase Price ($)",            type:"number", ph:""},
+  {key:"platform",  label:"Platform",                         type:"select", opts:PLATFORMS},
+  {key:"listPrice", label:"List Price ($)",                   type:"number", ph:""},
+  {key:"status",    label:"Status",                           type:"select", opts:STATUSES},
+  {key:"saleDate",  label:"Sale Date",                        type:"text",   ph:"e.g. 2024-08"},
+  {key:"salePrice", label:"Sale Price ($)",                   type:"number", ph:""},
+  {key:"ebayPayout",label:"eBay Payout ($) — Order Earnings", type:"number", ph:"From eBay receipt"},
+  {key:"shippingCost",label:"Shipping Cost ($) — info only",  type:"number", ph:"Not used in profit calc"},
+  {key:"notes",     label:"Notes",                            type:"textarea",span:true, ph:""},
+];
+
+function openModal(id){
+  currentItem = id ? {...items.find(i=>i.id===id)} : {
+    id:uid(),name:"",category:"Misc",source:"",purchaseDate:"",
+    purchasePrice:"",platform:"eBay",listingDate:"",listPrice:"",
+    status:"Unlisted",saleDate:"",salePrice:"",shippingCost:"",ebayPayout:"",notes:""
+  };
+  document.getElementById("modal-title").textContent = currentItem.name || "New Item";
+  document.getElementById("delete-btn").style.display = id ? "block" : "none";
+
+  // Build fields
+  document.getElementById("modal-fields").innerHTML = FIELDS.map(f=>{
+    const val=esc(currentItem[f.key]||"");
+    const cls=f.span?"field-full":"";
+    let input;
+    if(f.type==="select"){
+      input=`<select id="field-${f.key}" onchange="onFieldChange('${f.key}',this.value)">${f.opts.map(o=>`<option${o===(currentItem[f.key]||"")?" selected":""}>${esc(o)}</option>`).join("")}</select>`;
+    }else if(f.type==="textarea"){
+      input=`<textarea id="field-${f.key}" rows="2" placeholder="${esc(f.ph||"")}" oninput="onFieldChange('${f.key}',this.value)">${val}</textarea>`;
+    }else{
+      input=`<input type="${f.type}" id="field-${f.key}" value="${val}" placeholder="${esc(f.ph||"")}" step="${f.type==="number"?"0.01":""}" min="${f.type==="number"?"0":""}" oninput="onFieldChange('${f.key}',this.value)"/>`;
+    }
+    return `<div class="${cls}"><label class="field-label">${esc(f.label)}</label>${input}</div>`;
+  }).join("");
+
+  updateProfitPreview();
+  document.getElementById("modal-overlay").classList.add("open");
+  document.getElementById("modal-box").classList.add("fadeUp");
+}
+
+function onFieldChange(key,val){
+  currentItem[key]=val;
+  if(key==="name") document.getElementById("modal-title").textContent=val||"New Item";
+  if(["salePrice","ebayPayout","purchasePrice","shippingCost","platform","status"].includes(key)) updateProfitPreview();
+}
+
+function updateProfitPreview(){
+  const pp=document.getElementById("profit-preview");
+  if(currentItem.status!=="Sold"){pp.style.display="none";return;}
+  pp.style.display="flex";
+  const p=calcProfit(currentItem), r=calcROI(currentItem);
+  const fees=(parseFloat(currentItem.salePrice)||0)*(FEES[currentItem.platform]||.1325);
+  document.getElementById("pp-profit").textContent=fmt(p);
+  document.getElementById("pp-profit").style.color=p>=0?"#88ffaa":"#ff8888";
+  document.getElementById("pp-roi").textContent=r!=null?r.toFixed(0)+"%":"—";
+  document.getElementById("pp-roi").style.color=(r||0)>=0?"#88ffaa":"#ff8888";
+  document.getElementById("pp-fees").textContent=fmt(fees);
+}
+
+function closeModal(){ document.getElementById("modal-overlay").classList.remove("open"); }
+function closeModalIfOverlay(e){ if(e.target===document.getElementById("modal-overlay")) closeModal(); }
+
+async function saveCurrentItem(){
+  if(!currentItem.name){alert("Please enter an item name.");return;}
+  const item={...currentItem};
+  document.getElementById("save-btn").disabled=true;
+  showToast("Saving…","saving",30000);
+
+  // Optimistic update
+  const existing=items.findIndex(i=>i.id===item.id);
+  if(existing>=0) items[existing]=item; else items.push(item);
+  saveCache(); closeModal(); render();
+
+  try{
+    await apiPost({action:"save",item});
+    showToast("Saved ✓","success");
+  }catch{
+    showToast("Saved locally — sync failed","error",3500);
+  }finally{
+    document.getElementById("save-btn").disabled=false;
+  }
+}
+
+async function deleteCurrentItem(){
+  if(!confirm("Delete "+currentItem.name+"?")) return;
+  const id=currentItem.id;
+  closeModal();
+  showToast("Deleting…","saving",30000);
+  items=items.filter(i=>i.id!==id);
+  saveCache(); render();
+  try{
+    await apiPost({action:"delete",id});
+    showToast("Deleted ✓","success");
+  }catch{
+    showToast("Deleted locally — sync failed","error",3500);
+  }
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
